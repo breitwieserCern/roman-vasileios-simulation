@@ -14,7 +14,7 @@ struct GrowthModule {
   template <typename T>
   void Run(T* cell) {
     if (cell->GetDiameter() <= 40) {
-      cell->ChangeVolume(300000);
+      cell->ChangeVolume(400);
     } else {
       Divide(*cell);
     }
@@ -40,7 +40,7 @@ BDM_SIM_OBJECT(MyCell, Cell) {
   void SetCellTypeID(int type_id) { type_id_[kIdx] = type_id; }
 
   void DivideImpl(void* daughter_vptr, double volume_ratio, double phi,
-                  double theta) override {
+                  double theta) {
     auto daughter = static_cast<Self<Scalar>*>(daughter_vptr);
     double rand_double = gRandom.NextDouble();
     if (rand_double < 0.7) {
@@ -101,7 +101,7 @@ inline int Simulate(int argc, const char** argv) {
   Scheduler<> scheduler;
   auto cells = ResourceManager<>::Get()->Get<MyCell>();
 
-  for (int curr_time = 0; curr_time < 20; curr_time++) {
+  for (int curr_time = 0; curr_time < 600; curr_time++) {
     type1_counter = 0;
     type2_counter = 0;
     mass1_sum = 0.0;

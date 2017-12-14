@@ -1,4 +1,5 @@
 [visualization]
+live = true
 export = true
 export_interval = 1
 
