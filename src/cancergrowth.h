@@ -6,6 +6,7 @@
 
 namespace bdm {
 
+/* previous growth behaviour
 // Define growth behaviour
 struct GrowthModule {
   int curr_celltype;
@@ -23,6 +24,46 @@ struct GrowthModule {
   bool IsCopied(BmEvent event) const { return true; }
   ClassDefNV(GrowthModule, 1);
 };
+*/
+// 1. Define growth behaviour
+  struct GrowthModule : public BaseBiologyModule {
+    
+    GrowthModule() : BaseBiologyModule(gAllBmEvents) {}
+    
+    template <typename T>
+    void Run(T* cell) {
+//cell grow until it reach a diam of 8
+      if (cell->GetDiameter() < 8) {
+        cell->ChangeVolume(100); //200
+        
+        array<double, 3> cell_movements{gTRandom.Uniform(-2, 2), gTRandom.Uniform(-2, 2), gTRandom.Uniform(-2, 2)}; // create an array of 3 ramdom numbers between -2 and 2
+        cell->UpdateMassLocation(cell_movements);
+        cell->SetPosition(cell->GetMassLocation());
+        //Reset biological movement to 0.
+        cell->SetTractorForce({0, 0, 0});
+      }
+// when diam of 8, it has a chance of dividing 
+      else {
+//        cout << "can divide: " << cell->GetCanDivide() << endl;
+        double aNewRandomDouble=gTRandom.Uniform(0, 1);
+//        cout << "chance of: " << aNewRandomDouble  << endl;
+      
+        if (aNewRandomDouble <= 0.65 && cell->GetCanDivide()==true ) { //0.55 //0.65
+          auto&& daughter = Divide(*cell);
+          daughter.SetCanDivide(true); // daughter will be able to divide
+        }
+// if it doesn't divide, it will never be able to divide
+        else {
+          if (cell->GetCanDivide()==true) {
+            cell->SetCanDivide(false);
+          }
+        }
+      }
+    }
+    
+//    bool IsCopied(BmEvent event) const { return true; }
+    ClassDefNV(GrowthModule, 1);
+  };
 
 /// Default Cell implementation does not contain a data member type id
 /// Therefore, we extend cell and add this data member along with a Getter and
@@ -30,7 +71,7 @@ struct GrowthModule {
 /// for cell division, to decide in which way type id is copied from the mother
 /// to the daughter cell.
 BDM_SIM_OBJECT(MyCell, Cell) {
-  BDM_SIM_OBJECT_HEADER(MyCellExt, 1, type_id_);
+  BDM_SIM_OBJECT_HEADER(MyCellExt, 1, type_id_, can_divide_);
 
  public:
   MyCellExt() {}
@@ -53,8 +94,14 @@ BDM_SIM_OBJECT(MyCell, Cell) {
     Base::DivideImpl(daughter, volume_ratio, phi, theta);
   }
 
+  // getter and setter for can_divide_ and cell_colour_
+  void SetCanDivide(bool d) { can_divide_[kIdx] = d; }
+  bool GetCanDivide() { return can_divide_[kIdx]; }
+  bool* GetCanDividePtr() { return can_divide_.data(); }
+
  private:
   vec<int> type_id_;
+  vec<bool> can_divide_;
 };
 
 // Define compile time parameter
@@ -67,6 +114,10 @@ struct CompileTimeParam : public DefaultCompileTimeParam<Backend> {
 inline int Simulate(int argc, const char** argv) {
   InitializeBioDynamo(argc, argv);
   size_t cells_per_dim = 16;
+
+  Param::bound_space_ = true;
+  Param::min_bound_ = 0;
+  Param::max_bound_ = 320; // cells_per_dim * space
 
   int curr_celltype;
   double rand_double;
@@ -81,6 +132,7 @@ inline int Simulate(int argc, const char** argv) {
   auto construct = [&](const std::array<double, 3>& position) {
     MyCell cell(position);
     cell.SetDiameter(30);
+    cell.SetCanDivide(true);
     cell.AddBiologyModule(GrowthModule());
 
     rand_double = gRandom.NextDouble();
@@ -96,7 +148,7 @@ inline int Simulate(int argc, const char** argv) {
     cell.SetCellTypeID(curr_celltype);
     return cell;
   };
-  ModelInitializer::Grid3D(cells_per_dim, space, construct);
+  ModelInitializer::Grid3D(cells_per_dim, space, construct); // call Grid3D to create cells following "construct" model
 
   Scheduler<> scheduler;
   auto cells = ResourceManager<>::Get()->Get<MyCell>();
