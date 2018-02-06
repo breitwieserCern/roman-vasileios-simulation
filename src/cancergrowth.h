@@ -6,26 +6,9 @@
 
 namespace bdm {
 
-/* previous growth behaviour
-// Define growth behaviour
-struct GrowthModule {
-int curr_celltype;
-double rand_double;
-
-template <typename T>
-void Run(T* cell) {
-if (cell->GetDiameter() <= 40) {
-cell->ChangeVolume(400);
-} else {
-Divide(*cell);
-}
-}
-
-bool IsCopied(BmEvent event) const { return true; }
-ClassDefNV(GrowthModule, 1);
-};
-*/
-
+  // 0. Define my custom cell, which extends Cell by adding an extra
+// data member cell_type.
+  //oxygen_level should be between 0 and 1
   BDM_SIM_OBJECT(MyCell, Cell) {
     BDM_SIM_OBJECT_HEADER(MyCellExt, 1, can_divide_, type_id_, oxygen_level_, hypo_division_); // create the header with our new data member
 
@@ -42,22 +25,6 @@ ClassDefNV(GrowthModule, 1);
     int GetCellTypeID() { return type_id_[kIdx]; }
     int* GetCellTypeIDPtr() { return type_id_.data(); }
 
-
-  void DivideImpl(void* daughter_vptr, double volume_ratio, double phi,
-                  double theta) {
-    auto daughter = static_cast<Self<Scalar>*>(daughter_vptr);
-    double rand_double = gRandom.NextDouble();
-    if (rand_double < 0.7) {
-      daughter->type_id_[0] = 1;
-      type_id_[kIdx] = 1;
-    } else {
-      daughter->type_id_[0] = 2;
-      type_id_[kIdx] = 2;
-    }
-    Base::DivideImpl(daughter, volume_ratio, phi, theta);
-}
-
-
     void SetOxygenLevel(double oxygenLevel) {oxygen_level_[kIdx] = oxygenLevel; }
     double GetOxygenLevel() { return oxygen_level_[kIdx]; }
     double* GetOxygenLevelPtr() { return oxygen_level_.data(); }
@@ -65,6 +32,20 @@ ClassDefNV(GrowthModule, 1);
     void SetHypoDiv(bool div) { hypo_division_[kIdx] = div; }
     bool GetHypoDiv() { return hypo_division_[kIdx]; }
     bool* GetHypoDivPtr() { return hypo_division_.data(); }
+
+    void DivideImpl(void* daughter_vptr, double volume_ratio, double phi,
+                    double theta) {
+      auto daughter = static_cast<Self<Scalar>*>(daughter_vptr);
+      double rand_double = gRandom.NextDouble();
+      if (rand_double < 0.7) {
+        daughter->type_id_[0] = 1;
+        type_id_[kIdx] = 1;
+      } else {
+        daughter->type_id_[0] = 2;
+        type_id_[kIdx] = 2;
+      }
+      Base::DivideImpl(daughter, volume_ratio, phi, theta);
+    }
 
   private:
     // declare new data member and define their type
@@ -83,83 +64,71 @@ ClassDefNV(GrowthModule, 1);
     template <typename T>
       void Run(T* cell) {
 
+      int growthSpeed;
+      array<double, 3> cell_movements;
+      double divideProba;
+      double currentOxygenLevel=cell->GetOxygenLevel();
       // if normoxy: high division rate but low migration
-      if (cell->GetOxygenLevel() > 0.7) { 
-        //cell grow until it reach a diam of 8
-        if (cell->GetDiameter() < 8) {
-          cell->ChangeVolume(100);
-          
-          array<double, 3> cell_movements{gTRandom.Uniform(-1, 1), gTRandom.Uniform(-1, 1), gTRandom.Uniform(-1, 1)}; // create an array of 3 ramdom numbers between -1 and 1
-          cell->UpdateMassLocation(cell_movements);
-          cell->SetPosition(cell->GetMassLocation());
-          //Reset biological movement to 0.
-          cell->SetTractorForce({0, 0, 0});
-        }
-        // when diam of 8, it has a chance of dividing 
-        else {
-          double aNewRandomDouble=gTRandom.Uniform(0, 1);
-      
-          if (aNewRandomDouble <= 0.8 && cell->GetCanDivide()==true ) { //0.55 //0.65
-            auto&& daughter = Divide(*cell);
-            daughter.SetCellTypeID(cell->GetCellTypeID()); // daughter takes the type_id_ value of her mother
-            daughter.SetCanDivide(true); // daughter will be able to divide
-            daughter.SetOxygenLevel(cell->GetOxygenLevel()); // daughter takes the oxygen_level_ value of her mother
-          }
-          // if it doesn't divide, it will never be able to divide
-          else {
-            if (cell->GetCanDivide()==true) {
-              cell->SetCanDivide(false);
-            }
-          }
-        }
+      if (currentOxygenLevel > 0.7) {
+        cell->SetHypoDiv(true);
+        growthSpeed=100;
+        cell_movements={gTRandom.Uniform(-1, 1), gTRandom.Uniform(-1, 1), gTRandom.Uniform(-1, 1)}; // create an array of 3 ramdom numbers between -1 and 1
+        divideProba=0.8;
       }
-      
       // if hypoxy: low division rate but high migration
-      else if (cell->GetOxygenLevel() > 0.4) {
-        // moves in anycase
-//TODO: not a random migration. depending on oxygen gradient
-        array<double, 3> cell_movements{gTRandom.Uniform(-4, 4), gTRandom.Uniform(-4, 4), gTRandom.Uniform(-4, 4)}; // create an array of 3 ramdom numbers between -1 and 1
+      else if (currentOxygenLevel > 0.3) {
+        growthSpeed = 40;
+        //TODO: not a random migration. depending on oxygen gradient. Can get oxygen gradien from feb3
+        cell_movements={gTRandom.Uniform(-4, 4), gTRandom.Uniform(-4, 4), gTRandom.Uniform(-4, 4)}; // create an array of 3 ramdom numbers between -4 and 4
+        divideProba=0.4;
+      }
+      // necrose
+      else {
+        return; // quit bio module
+        // don't do anything, but can have a behaviour
+//        growthSpeed=0;
+//        cell_movements={0, 0, 0};
+//        divideProba=0;
+//        cell->SetHypoDiv(false);
+      }
+        
+      //cell grow until it reach a diam of 40
+      if (cell->GetDiameter() < 40) {
+        cell->ChangeVolume(growthSpeed);
         cell->UpdateMassLocation(cell_movements);
         cell->SetPosition(cell->GetMassLocation());
         //Reset biological movement to 0.
         cell->SetTractorForce({0, 0, 0});
-
-        //cell grow until it reach a diam of 8
-        if (cell->GetDiameter() < 8) {
-          cell->ChangeVolume(40); //100
+      }
+      // when diam of 8, it has a chance of dividing (if it can divide)
+      else if (cell->GetCanDivide()==true && cell->GetHypoDiv()==true) {
+        double aNewRandomDouble=gTRandom.Uniform(0, 1);
+        if (aNewRandomDouble <= divideProba) { //0.55 //0.65
+          auto&& daughter = Divide(*cell);
+          daughter.SetCellTypeID(cell->GetCellTypeID()); // daughter takes the type_id_ value of her mother
+          daughter.SetCanDivide(true); // daughter will be able to divide
+          daughter.SetHypoDiv(true); // daughter will be able to divide in hypoxy
+          daughter.SetOxygenLevel(cell->GetOxygenLevel()); // daughter takes the oxygen_level_ value of her mother
         }
-        // when diam of 8, it has a chance of dividing 
+        // if it doesn't divide
         else {
-          double aNewRandomDouble=gTRandom.Uniform(0, 1);
-      
-          if (aNewRandomDouble <= 0.2 && cell->GetCanDivide()==true ) { // 0.8 for normoxy
-            auto&& daughter = Divide(*cell);
-            daughter.SetCellTypeID(cell->GetCellTypeID()); // daughter takes the type_id_ value of her mother
-            daughter.SetCanDivide(true); // daughter will be able to divide
-            daughter.SetOxygenLevel(cell->GetOxygenLevel()); // daughter takes the oxygen_level_ value of her mother
-            daughter.SetHypoDiv(true); // daughter will be able to divide
+          // it won't divide in hypoxy any more
+          if (currentOxygenLevel <= 0.7) {
+            cell->SetHypoDiv(false);
           }
-          // if it doesn't divide, it will never be able to divide
-          else {
-            if (cell->GetCanDivide()==true && cell->GetHypoDiv()==true) {
-              cell->SetHypoDiv(false);
-            }
+          // it will never be able to divide any more
+          if (currentOxygenLevel > 0.7) {
+            cell->SetCanDivide(false);
           }
         }
       }
-		
-      // if necrotic tissue: don't do anything (proba to die?)
-//      else if (gTRandom.Uniform(0, 1) <=0.00001) { // proba to die at every time step
-//        Delete(*cell); // Delete() method isn't implemented in this version
-//      }
       
     } // end of Run()
     
 //    bool IsCopied(BmEvent event) const { return true; }
     ClassDefNV(GrowthModule, 1);
-  };
-
-
+    
+  }; // end GrowthModule
 
 // Define compile time parameter
   template <typename Backend>
@@ -168,6 +137,7 @@ ClassDefNV(GrowthModule, 1);
     using AtomicTypes = VariadicTypedef<MyCell>;
   };
 
+  template <typename TResourceManager = ResourceManager<>> 
   inline int Simulate(int argc, const char** argv) {
     InitializeBioDynamo(argc, argv);
     size_t cells_per_dim = 16;
@@ -223,7 +193,7 @@ ClassDefNV(GrowthModule, 1);
       // Readout relevant information
 
       for (size_t i = 0; i < cells->size(); i++) {
-        auto&& cell = (*cells)[i];
+        auto&& cell = (cells)[i];
 
         curr_celltype = cell.GetCellTypeID();
         if (curr_celltype < 2) {
@@ -246,6 +216,25 @@ ClassDefNV(GrowthModule, 1);
                 << type2_counter << std::endl;
       std::cout << "Mass of type 0 and 1 cells: " << mass1_sum << " / "
                 << mass2_sum << std::endl;
+    }
+
+    // OxygenLevel will be updated depending on feb3 simulations
+    for (size_t i = 0; i < cells->size(); i++) {
+      auto&& cell = (cells)[i];
+      cell.SetOxygenLevel(0.5);
+    }
+    
+    for (int i=0; i<400; i++) {
+      scheduler.Simulate(1);
+    }
+
+    for (size_t i = 0; i < cells->size(); i++) {
+      auto&& cell = (cells)[i];
+      cell.SetOxygenLevel(0.1);
+    }
+    
+    for (int i=0; i<400; i++) {
+      scheduler.Simulate(1);
     }
 
     DiscontinuousInterfaceData myDisc_fd(1);
